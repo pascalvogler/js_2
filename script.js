@@ -1,9 +1,65 @@
+class OreDeposit {
+    constructor(x, y, resource_type, ore_amount) {
+        this.x = x;
+        this.y = y;
+        this.width = 50;
+        this.height = 50;
+        this.resource_type = resource_type;
+        this.ore_amount = ore_amount;
+    }
+
+    // Static method to spawn ore deposits
+    static spawn(game, numDeposits) {
+        const deposits = [];
+        const resourceTypes = ['Mithril', 'Lavasteel', 'Obsidianite'];
+        for (let i = 0; i < numDeposits; i++) {
+            let x, y;
+            let isValidPosition;
+            do {
+                x = Math.floor(Math.random() * game.mapCols) * game.tileSize;
+                y = Math.floor(Math.random() * game.mapRows) * game.tileSize;
+                // Check if the position is walkable and not overlapping with existing deposits in this spawn cycle
+                isValidPosition = game.isWalkable(x, y, 50, 50) && !deposits.some(deposit => deposit.x === x && deposit.y === y);
+            } while (!isValidPosition);
+
+            // Random resource type and ore amount (between 50 and 200)
+            const resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
+            const oreAmount = Math.floor(Math.random() * (200 - 50 + 1)) + 50;
+            deposits.push(new OreDeposit(x, y, resourceType, oreAmount));
+        }
+        return deposits;
+    }
+
+    draw(context) {
+        // Set color based on resource type
+        let fillStyle;
+        switch (this.resource_type) {
+            case 'Mithril':
+                fillStyle = '#FFFFE0'; // Light yellow
+                break;
+            case 'Lavasteel':
+                fillStyle = '#FFA07A'; // Light orange
+                break;
+            case 'Obsidianite':
+                fillStyle = '#4B0082'; // Dark purple (metallic sheen)
+                break;
+            default:
+                fillStyle = '#FFD700'; // Default golden (fallback)
+        }
+        context.fillStyle = fillStyle;
+        context.fillRect(this.x, this.y, this.width, this.height);
+        // Debug: Draw hitbox outline
+        // context.strokeStyle = 'red';
+        // context.strokeRect(this.x, this.y, this.width, this.height);
+    }
+}
+
 class Player {
     constructor(game) {
         this.game = game;
         this.width = 50; // Define player size
         this.height = 50;
-        this.speed = 200; // Pixels per second
+        this.speed = 200; // Pixels per second;
 
         // Find a walkable starting position
         let startX, startY;
@@ -40,31 +96,118 @@ class Player {
         if (this.game.keys.includes('w')) dy -= speed;
         if (this.game.keys.includes('s')) dy += speed;
 
-        // Function to check if a position is valid
-        const isValidPosition = (x, y) => {
-            return x >= 0 && x + this.width <= this.game.mapWidth && y >= 0 && y + this.height <= this.game.mapHeight &&
-                   this.game.isWalkable(x, y) && this.game.isWalkable(x + this.width - 1, y) &&
-                   this.game.isWalkable(x, y + this.height - 1) && this.game.isWalkable(x + this.width - 1, y + this.height - 1);
+        // Function to check if a position is valid and return nearest valid position if invalid
+        const getValidPosition = (x, y) => {
+            if (x < 0) x = 0;
+            if (x + this.width > this.game.mapWidth) x = this.game.mapWidth - this.width;
+            if (y < 0) y = 0;
+            if (y + this.height > this.game.mapHeight) y = this.game.mapHeight - this.height;
+
+            // Check if the entire hitbox is walkable
+            if (this.game.isWalkable(x, y, this.width, this.height)) {
+                return { x, y };
+            }
+
+            // Adjust position based on tile map (walls and water)
+            const startCol = Math.floor(x / this.game.tileSize);
+            const endCol = Math.floor((x + this.width - 1) / this.game.tileSize);
+            const startRow = Math.floor(y / this.game.tileSize);
+            const endRow = Math.floor((y + this.height - 1) / this.game.tileSize);
+
+            const isTileWalkable = (r, c) => {
+                if (r < 0 || r >= this.game.mapRows || c < 0 || c >= this.mapCols || !this.game.map[r] || typeof this.game.map[r][c] === 'undefined') {
+                    return false;
+                }
+                return this.game.map[r][c] === 0;
+            };
+
+            // Adjust based on movement direction
+            if (dx < 0) { // Moving left
+                // Find the rightmost non-walkable tile in the hitbox
+                for (let col = startCol; col <= endCol; col++) {
+                    for (let row = startRow; row <= endRow; row++) {
+                        if (!isTileWalkable(row, col)) {
+                            const tileRight = (col + 1) * this.game.tileSize;
+                            x = tileRight;
+                            break;
+                        }
+                    }
+                }
+            } else if (dx > 0) { // Moving right
+                // Find the leftmost non-walkable tile in the hitbox
+                for (let col = endCol; col >= startCol; col--) {
+                    for (let row = startRow; row <= endRow; row++) {
+                        if (!isTileWalkable(row, col)) {
+                            const tileLeft = col * this.game.tileSize;
+                            x = tileLeft - this.width;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (dy < 0) { // Moving up
+                // Find the bottommost non-walkable tile in the hitbox
+                for (let row = startRow; row <= endRow; row++) {
+                    for (let col = startCol; col <= endCol; col++) {
+                        if (!isTileWalkable(row, col)) {
+                            const tileBottom = (row + 1) * this.game.tileSize;
+                            y = tileBottom;
+                            break;
+                        }
+                    }
+                }
+            } else if (dy > 0) { // Moving down
+                // Find the topmost non-walkable tile in the hitbox
+                for (let row = endRow; row >= startRow; row--) {
+                    for (let col = startCol; col <= endCol; col++) {
+                        if (!isTileWalkable(row, col)) {
+                            const tileTop = row * this.game.tileSize;
+                            y = tileTop - this.height;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Adjust position to avoid collision with ore deposits
+            for (let deposit of this.game.oreDeposits) {
+                const playerLeft = x;
+                const playerRight = x + this.width;
+                const playerTop = y;
+                const playerBottom = y + this.height;
+
+                const depositLeft = deposit.x;
+                const depositRight = deposit.x + deposit.width;
+                const depositTop = deposit.y;
+                const depositBottom = deposit.y + deposit.height;
+
+                if (playerRight > depositLeft && playerLeft < depositRight &&
+                    playerBottom > depositTop && playerTop < depositBottom) {
+                    // Adjust position to the nearest edge of the deposit
+                    if (dx > 0) x = depositLeft - this.width; // Move left of deposit
+                    else if (dx < 0) x = depositRight; // Move right of deposit
+                    if (dy > 0) y = depositTop - this.height; // Move above deposit
+                    else if (dy < 0) y = depositBottom; // Move below deposit
+                    break;
+                }
+            }
+
+            return { x, y };
         };
 
         // Try moving along x-axis
         if (dx !== 0) {
             newX += dx;
-            const tileX = Math.floor(newX / this.game.tileSize) * this.game.tileSize;
-            if (!isValidPosition(newX, this.y)) {
-                // Clamp to the nearest tile edge
-                newX = dx > 0 ? tileX : tileX + this.game.tileSize;
-            }
+            const { x } = getValidPosition(newX, this.y);
+            newX = x;
         }
 
         // Try moving along y-axis with updated x
         if (dy !== 0) {
             newY += dy;
-            const tileY = Math.floor(newY / this.game.tileSize) * this.game.tileSize;
-            if (!isValidPosition(newX, newY)) {
-                // Clamp to the nearest tile edge
-                newY = dy > 0 ? tileY : tileY + this.game.tileSize;
-            }
+            const { y } = getValidPosition(newX, newY);
+            newY = y;
         }
 
         // Apply the new position with a small tolerance to prevent oscillation
@@ -76,7 +219,6 @@ class Player {
 
         // Update camera to follow player
         this.game.camera.update();
-        console.log("player x: " + this.x + " - y: " + this.y);
     }
 }
 
@@ -113,12 +255,18 @@ class Game {
         this.mapRows = this.mapHeight / this.tileSize; // 40 rows
         this.keys = [];
         this.map = []; // 2D array to store the tile map
+        this.oreDeposits = []; // Initialize as an empty array to avoid undefined
 
         // Generate the map first
         this.generateMap();
 
-        // Now create the player, after the map is generated
+        // Spawn ore deposits
+        this.oreDeposits = OreDeposit.spawn(this, 10);
+
+        // Now create the player, after the map and ore deposits are generated
         this.player = new Player(this);
+
+        // Create the camera
         this.camera = new Camera(this);
 
         // Keyboard event listeners
@@ -175,15 +323,46 @@ class Game {
         }
     }
 
-    isWalkable(x, y) {
-        // Convert pixel coordinates to tile coordinates
-        const col = Math.floor(x / this.tileSize);
-        const row = Math.floor(y / this.tileSize);
-        // Check if within bounds and walkable
-        if (row >= 0 && row < this.mapRows && col >= 0 && col < this.mapCols && this.map[row] && typeof this.map[row][col] !== 'undefined') {
-            return this.map[row][col] === 0; // Walkable if tile is 0
+    isWalkable(x, y, width = 50, height = 50) {
+        // Calculate the range of tiles the hitbox covers
+        const startCol = Math.floor(x / this.tileSize);
+        const endCol = Math.floor((x + width - 1) / this.tileSize);
+        const startRow = Math.floor(y / this.tileSize);
+        const endRow = Math.floor((y + height - 1) / this.tileSize);
+
+        // Check all tiles in the range
+        for (let row = startRow; row <= endRow; row++) {
+            for (let col = startCol; col <= endCol; col++) {
+                // Check tile map
+                if (row < 0 || row >= this.mapRows || col < 0 || col >= this.mapCols || !this.map[row] || typeof this.map[row][col] === 'undefined') {
+                    return false;
+                }
+                if (this.map[row][col] !== 0) return false; // Not walkable if tile is wall (1) or water (2)
+            }
         }
-        return false;
+
+        // Check for collision with ore deposits
+        if (this.oreDeposits) {
+            for (let deposit of this.oreDeposits) {
+                // Axis-Aligned Bounding Box (AABB) collision detection
+                const playerLeft = x;
+                const playerRight = x + width;
+                const playerTop = y;
+                const playerBottom = y + height;
+
+                const depositLeft = deposit.x;
+                const depositRight = deposit.x + deposit.width;
+                const depositTop = deposit.y;
+                const depositBottom = deposit.y + deposit.height;
+
+                // Check if player's bounding box overlaps with deposit's bounding box
+                if (playerRight > depositLeft && playerLeft < depositRight &&
+                    playerBottom > depositTop && playerTop < depositBottom) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     render(context, deltaTime) {
@@ -194,7 +373,7 @@ class Game {
         const startCol = Math.floor(this.camera.x / this.tileSize);
         const endCol = Math.min(startCol + Math.ceil(this.canvas.width / this.tileSize) + 1, this.mapCols);
         const startRow = Math.floor(this.camera.y / this.tileSize);
-        const endRow = Math.min(startRow + Math.ceil(this.height / this.tileSize) + 1, this.mapRows);
+        const endRow = Math.min(startRow + Math.ceil(this.canvas.height / this.tileSize) + 1, this.mapRows);
 
         // Draw tiles
         context.save();
@@ -213,6 +392,14 @@ class Game {
                 context.fillRect(x, y, this.tileSize, this.tileSize);
             }
         }
+
+        // Draw ore deposits
+        if (this.oreDeposits) {
+            for (let deposit of this.oreDeposits) {
+                deposit.draw(context);
+            }
+        }
+
         context.restore();
 
         // Update and draw player
