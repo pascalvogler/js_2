@@ -1,31 +1,58 @@
 class OreDeposit {
-    constructor(x, y, resource_type, ore_amount) {
+    constructor(x, y, resource_type, energy) {
         this.x = x;
         this.y = y;
         this.width = 50;
         this.height = 50;
         this.resource_type = resource_type;
-        this.ore_amount = ore_amount;
+        this.energy = energy; // Amount of Energy in this deposit
     }
+
+    // Static data for ore types, probabilities, and Energy ranges
+    static oreData = {
+        'Lavasteel': { probability: 70, energyMin: 1, energyMax: 3 },
+        'Mithril': { probability: 25, energyMin: 2, energyMax: 6 },
+        'Obsidianite': { probability: 5, energyMin: 8, energyMax: 12 }
+    };
 
     // Static method to spawn ore deposits
     static spawn(game, numDeposits) {
         const deposits = [];
-        const resourceTypes = ['Mithril', 'Lavasteel', 'Obsidianite'];
+        const resourceTypes = Object.keys(OreDeposit.oreData);
+
+        // Compute cumulative probabilities for weighted selection
+        const cumulativeProbabilities = [];
+        let cumulative = 0;
+        for (let type of resourceTypes) {
+            cumulative += OreDeposit.oreData[type].probability;
+            cumulativeProbabilities.push({ type, threshold: cumulative });
+        }
+
         for (let i = 0; i < numDeposits; i++) {
             let x, y;
             let isValidPosition;
             do {
                 x = Math.floor(Math.random() * game.mapCols) * game.tileSize;
                 y = Math.floor(Math.random() * game.mapRows) * game.tileSize;
-                // Check if the position is walkable and not overlapping with existing deposits in this spawn cycle
+                // Check if the position is walkable and not overlapping with existing deposits
                 isValidPosition = game.isWalkable(x, y, 50, 50) && !deposits.some(deposit => deposit.x === x && deposit.y === y);
             } while (!isValidPosition);
 
-            // Random resource type and ore amount (between 50 and 200)
-            const resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
-            const oreAmount = Math.floor(Math.random() * (200 - 50 + 1)) + 50;
-            deposits.push(new OreDeposit(x, y, resourceType, oreAmount));
+            // Weighted random selection of resource type
+            const rand = Math.random() * 100;
+            let resourceType = resourceTypes[0]; // Default to first type
+            for (let { type, threshold } of cumulativeProbabilities) {
+                if (rand <= threshold) {
+                    resourceType = type;
+                    break;
+                }
+            }
+
+            // Random Energy amount within the range for this ore type
+            const { energyMin, energyMax } = OreDeposit.oreData[resourceType];
+            const energy = Math.floor(Math.random() * (energyMax - energyMin + 1)) + energyMin;
+
+            deposits.push(new OreDeposit(x, y, resourceType, energy));
         }
         return deposits;
     }
@@ -48,9 +75,12 @@ class OreDeposit {
         }
         context.fillStyle = fillStyle;
         context.fillRect(this.x, this.y, this.width, this.height);
-        // Debug: Draw hitbox outline
-        // context.strokeStyle = 'red';
-        // context.strokeRect(this.x, this.y, this.width, this.height);
+    }
+
+    // Method to get tooltip text
+    getTooltipText() {
+        const { energyMin, energyMax } = OreDeposit.oreData[this.resource_type];
+        return `${this.resource_type}: ${energyMin}–${energyMax} Energy`;
     }
 }
 
@@ -60,6 +90,7 @@ class Player {
         this.width = 50; // Define player size
         this.height = 50;
         this.speed = 200; // Pixels per second;
+        this.totalEnergy = 0; // Total mined Energy, now part of Player
 
         // Find a walkable starting position
         let startX, startY;
@@ -76,8 +107,33 @@ class Player {
         context.save();
         // Translate to camera position
         context.translate(-this.game.camera.x, -this.game.camera.y);
+
+        // Draw the player
         context.fillStyle = 'white';
         context.fillRect(this.x, this.y, this.width, this.height);
+
+        // Draw mining progress bar if mining is active
+        if (this.game.mining.active && this.game.mining.ore) {
+            const barWidth = this.width; // Same width as player (50px)
+            const barHeight = 10; // Small height for the bar
+            const barX = this.x; // Align with player's left edge
+            const barY = this.y + this.height + 2; // Just below the player with a 2px gap
+
+            // Calculate progress (0 to 1)
+            const currentTime = Date.now();
+            const holdTime = (currentTime - this.game.mining.startTime) / 1000; // In seconds
+            const progress = Math.min(holdTime, 1); // Cap at 1 (100%)
+
+            // Draw the bar border
+            context.strokeStyle = 'black';
+            context.lineWidth = 1;
+            context.strokeRect(barX, barY, barWidth, barHeight);
+
+            // Draw the filled portion of the bar
+            context.fillStyle = 'green';
+            context.fillRect(barX, barY, barWidth * progress, barHeight);
+        }
+
         context.restore();
     }
 
@@ -256,6 +312,9 @@ class Game {
         this.keys = [];
         this.map = []; // 2D array to store the tile map
         this.oreDeposits = []; // Initialize as an empty array to avoid undefined
+        this.mouse = { x: 0, y: 0 }; // Track mouse position
+        this.mining = { active: false, ore: null, startTime: 0 }; // Track mining state
+        this.miningFeedback = []; // Store "+1" feedback
 
         // Generate the map first
         this.generateMap();
@@ -276,6 +335,52 @@ class Game {
         window.addEventListener('keyup', (e) => {
             const index = this.keys.indexOf(e.key);
             if (index > -1) this.keys.splice(index, 1);
+        });
+
+        // Mouse event listeners for mining
+        this.canvas.addEventListener('mousemove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouse.x = e.clientX - rect.left + this.camera.x;
+            this.mouse.y = e.clientY - rect.top + this.camera.y;
+        });
+
+        this.canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Left mouse button
+                // If already mining, don't start a new mining session
+                if (this.mining.active) return;
+
+                for (let deposit of this.oreDeposits) {
+                    if (this.mouse.x >= deposit.x && this.mouse.x <= deposit.x + deposit.width &&
+                        this.mouse.y >= deposit.y && this.mouse.y <= deposit.y + deposit.height) {
+                        // Calculate the distance between the centers of the player and ore
+                        const playerCenterX = this.player.x + this.player.width / 2;
+                        const playerCenterY = this.player.y + this.player.height / 2;
+                        const oreCenterX = deposit.x + deposit.width / 2;
+                        const oreCenterY = deposit.y + deposit.height / 2;
+
+                        const dx = playerCenterX - oreCenterX;
+                        const dy = playerCenterY - oreCenterY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        // Allow mining if the distance between centers is <= 75 pixels
+                        // (50 pixels for the width/height of both objects + a 25-pixel buffer)
+                        if (distance <= 75) {
+                            this.mining.active = true;
+                            this.mining.ore = deposit;
+                            this.mining.startTime = Date.now();
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        this.canvas.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                this.mining.active = false;
+                this.mining.ore = null;
+                this.mining.startTime = 0;
+            }
         });
     }
 
@@ -328,7 +433,7 @@ class Game {
         const startCol = Math.floor(x / this.tileSize);
         const endCol = Math.floor((x + width - 1) / this.tileSize);
         const startRow = Math.floor(y / this.tileSize);
-        const endRow = Math.floor((y + height - 1) / this.tileSize);
+        const endRow = Math.floor((y + this.height - 1) / this.tileSize);
 
         // Check all tiles in the range
         for (let row = startRow; row <= endRow; row++) {
@@ -405,6 +510,93 @@ class Game {
         // Update and draw player
         this.player.update(deltaTime);
         this.player.draw(context);
+
+        // Check for mouse hover over ores and draw tooltip
+        let hoveredDeposit = null;
+        for (let deposit of this.oreDeposits) {
+            if (this.mouse.x >= deposit.x && this.mouse.x <= deposit.x + deposit.width &&
+                this.mouse.y >= deposit.y && this.mouse.y <= deposit.y + deposit.height) {
+                hoveredDeposit = deposit;
+                break;
+            }
+        }
+
+        if (hoveredDeposit) {
+            const tooltipText = hoveredDeposit.getTooltipText();
+            const tooltipX = this.mouse.x - this.camera.x + 10; // 10 pixels to the right of the cursor
+            const tooltipY = this.mouse.y - this.camera.y;
+            context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            context.fillRect(tooltipX, tooltipY - 20, context.measureText(tooltipText).width + 10, 30);
+            context.fillStyle = 'white';
+            context.fillText(tooltipText, tooltipX + 5, tooltipY);
+        }
+
+        // Handle mining
+        if (this.mining.active && this.mining.ore) {
+            // Ensure the mouse is still over the ore being mined
+            const ore = this.mining.ore;
+            const isMouseOverOre = this.mouse.x >= ore.x && this.mouse.x <= ore.x + ore.width &&
+                                  this.mouse.y >= ore.y && this.mouse.y <= ore.y + ore.height;
+            if (!isMouseOverOre) {
+                this.mining.active = false;
+                this.mining.ore = null;
+                this.mining.startTime = 0;
+            } else {
+                const currentTime = Date.now();
+                const holdTime = (currentTime - this.mining.startTime) / 1000; // Convert to seconds
+                if (holdTime >= 1 && this.mining.ore.energy > 0) {
+                    this.mining.ore.energy -= 1;
+                    this.player.totalEnergy += 1; // Increment player's totalEnergy
+                    this.mining.startTime = currentTime; // Reset timer for next Energy
+
+                    // Add "+1" feedback
+                    this.miningFeedback.push({
+                        x: this.mining.ore.x + this.mining.ore.width / 2,
+                        y: this.mining.ore.y - 10,
+                        text: '+1',
+                        startTime: currentTime,
+                        duration: 0.5 // Display for 0.5 seconds
+                    });
+
+                    // Remove ore and update map if energy is depleted
+                    if (this.mining.ore.energy <= 0) {
+                        const col = Math.floor(this.mining.ore.x / this.tileSize);
+                        const row = Math.floor(this.mining.ore.y / this.tileSize);
+                        this.map[row][col] = 0; // Make area walkable
+                        this.oreDeposits = this.oreDeposits.filter(d => d !== this.mining.ore);
+                        this.mining.active = false;
+                        this.mining.ore = null;
+                        this.mining.startTime = 0;
+                    }
+                }
+            }
+        }
+
+        // Draw "+1" feedback
+        context.save();
+        context.translate(-this.camera.x, -this.camera.y);
+        context.fillStyle = 'green';
+        this.miningFeedback = this.miningFeedback.filter(feedback => {
+            const elapsed = (Date.now() - feedback.startTime) / 1000;
+            if (elapsed < feedback.duration) {
+                context.fillText(feedback.text, feedback.x, feedback.y);
+                return true;
+            }
+            return false;
+        });
+        context.restore();
+
+        // Draw total Energy window using player's totalEnergy
+        const energyText = `Total Energy: ${this.player.totalEnergy}`;
+        const padding = 10;
+        const windowWidth = context.measureText(energyText).width + padding * 2;
+        const windowHeight = 30;
+        const windowX = this.width - windowWidth;
+        const windowY = this.height - windowHeight;
+        context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        context.fillRect(windowX, windowY, windowWidth, windowHeight);
+        context.fillStyle = 'white';
+        context.fillText(energyText, windowX + padding, windowY + 20);
     }
 }
 
