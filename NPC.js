@@ -13,11 +13,11 @@ export class NPC {
 
         // Wandering state
         this.state = 'moving'; // 'moving' or 'paused'
-        this.direction = Math.floor(Math.random() * 4); // 0: left, 1: right, 2: up, 3: down
+        this.angle = Math.random() * 2 * Math.PI; // Random angle in radians (0 to 2π)
         this.moveTime = this.getRandomMoveTime(); // Time to move (3-10 seconds)
         this.pauseTime = this.getRandomPauseTime(); // Time to pause (1-8 seconds)
         this.currentTime = 0; // Track elapsed time in current state
-        console.log(`NPC ${this.type} initialized with state=${this.state}, moveTime=${this.moveTime}, pauseTime=${this.pauseTime}`);
+        console.log(`NPC ${this.type} initialized with state=${this.state}, angle=${this.angle}, moveTime=${this.moveTime}, pauseTime=${this.pauseTime}`);
     }
 
     getRandomMoveTime() {
@@ -29,14 +29,9 @@ export class NPC {
     }
 
     getMovementInput(speed) {
-        let dx = 0;
-        let dy = 0;
-
-        if (this.direction === 0) dx -= speed; // Left
-        else if (this.direction === 1) dx += speed; // Right
-        else if (this.direction === 2) dy -= speed; // Up
-        else if (this.direction === 3) dy += speed; // Down
-
+        // Use the angle to compute dx and dy for omnidirectional movement
+        const dx = speed * Math.cos(this.angle);
+        const dy = speed * Math.sin(this.angle);
         return { dx, dy };
     }
 
@@ -186,10 +181,10 @@ export class NPC {
         if (Math.abs(newX - this.x) < tolerance) newX = this.x;
         if (Math.abs(newY - this.y) < tolerance) newY = this.y;
 
-        // If movement is blocked (position didn't change significantly), find a new direction
+        // If movement is blocked (position didn't change significantly), pick a new angle
         if (Math.abs(newX - this.x) < tolerance && Math.abs(newY - this.y) < tolerance && (dx !== 0 || dy !== 0)) {
-            console.log(`NPC ${this.type} movement blocked, finding new direction`);
-            this.direction = Math.floor(Math.random() * 4); // Pick a new random direction
+            console.log(`NPC ${this.type} movement blocked, picking new angle`);
+            this.angle = Math.random() * 2 * Math.PI; // Pick a new random angle
             return;
         }
 
@@ -217,7 +212,7 @@ export class NPC {
                 this.state = 'moving';
                 this.currentTime = 0;
                 this.moveTime = this.getRandomMoveTime();
-                this.direction = Math.floor(Math.random() * 4);
+                this.angle = Math.random() * 2 * Math.PI; // Pick a new random angle
             }
         }
     }

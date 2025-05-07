@@ -280,13 +280,17 @@ export class Game {
         }
         if (this.monsters) {
             for (let monster of this.monsters) {
-                monster.update(deltaTime, this.player, this);
+                if (this.state === 'running') {
+                    monster.update(deltaTime, this.player, this); // Only update when running
+                }
                 monster.draw(context);
             }
         }
         if (this.enemies) {
             for (let enemy of this.enemies) {
-                enemy.update(deltaTime, this.player, this);
+                if (this.state === 'running') {
+                    enemy.update(deltaTime, this.player, this); // Only update when running
+                }
                 enemy.draw(context);
             }
         }
