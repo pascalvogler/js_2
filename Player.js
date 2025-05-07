@@ -1,15 +1,17 @@
+import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, PLAYER_SPEED, MOVEMENT_TOLERANCE, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_OFFSET } from './Constants.js';
+
 export class Player {
     constructor(game) {
         this.game = game;
-        this.width = 50;
-        this.height = 50;
-        this.speed = 200;
+        this.width = TILE_SIZE;
+        this.height = TILE_SIZE;
+        this.speed = PLAYER_SPEED;
         this.totalEnergy = 0;
 
         let startX, startY;
         do {
-            startX = Math.floor(Math.random() * this.game.mapWidth / 50) * 50;
-            startY = Math.floor(Math.random() * this.game.mapHeight / 50) * 50;
+            startX = Math.floor(Math.random() * MAP_WIDTH / TILE_SIZE) * TILE_SIZE;
+            startY = Math.floor(Math.random() * MAP_HEIGHT / TILE_SIZE) * TILE_SIZE;
         } while (!this.game.isWalkable(startX, startY));
         this.x = startX;
         this.y = startY;
@@ -23,9 +25,9 @@ export class Player {
 
         if (this.game.mining.active && this.game.mining.ore) {
             const barWidth = this.width;
-            const barHeight = 10;
+            const barHeight = PROGRESS_BAR_HEIGHT;
             const barX = this.x;
-            const barY = this.y + this.height + 2;
+            const barY = this.y + this.height + PROGRESS_BAR_OFFSET;
             const currentTime = Date.now();
             const holdTime = (currentTime - this.game.mining.startTime) / 1000;
             const progress = Math.min(holdTime, 1);
@@ -83,7 +85,7 @@ export class Player {
             newY = y;
         }
 
-        const tolerance = 0.1;
+        const tolerance = MOVEMENT_TOLERANCE;
         if (Math.abs(newX - this.x) < tolerance) newX = this.x;
         if (Math.abs(newY - this.y) < tolerance) newY = this.y;
 
@@ -92,13 +94,13 @@ export class Player {
     }
 
     getValidPosition(x, y, dx, dy) {
+        // Clamp to map boundaries
         if (x < 0) x = 0;
         if (x + this.width > this.game.mapWidth) x = this.game.mapWidth - this.width;
         if (y < 0) y = 0;
         if (y + this.height > this.game.mapHeight) y = this.game.mapHeight - this.height;
 
-        if (this.game.isWalkable(x, y, this.width, this.height)) return { x, y };
-
+        // Check tile collisions
         const startCol = Math.floor(x / this.game.tileSize);
         const endCol = Math.floor((x + this.width - 1) / this.game.tileSize);
         const startRow = Math.floor(y / this.game.tileSize);
@@ -109,12 +111,66 @@ export class Player {
             return this.game.map[r][c] === 0;
         };
 
-        if (dx < 0) for (let col = startCol; col <= endCol; col++) for (let row = startRow; row <= endRow; row++) if (!isTileWalkable(row, col)) { x = (col + 1) * this.game.tileSize; break; }
-        else if (dx > 0) for (let col = endCol; col >= startCol; col--) for (let row = startRow; row <= endRow; row++) if (!isTileWalkable(row, col)) { x = col * this.game.tileSize - this.width; break; }
+        // Check if the new position overlaps with any unwalkable tiles
+        let tileCollision = false;
+        for (let row = startRow; row <= endRow; row++) {
+            for (let col = startCol; col <= endCol; col++) {
+                if (!isTileWalkable(row, col)) {
+                    tileCollision = true;
+                    break;
+                }
+            }
+            if (tileCollision) break;
+        }
 
-        if (dy < 0) for (let row = startRow; row <= endRow; row++) for (let col = startCol; col <= endCol; col++) if (!isTileWalkable(row, col)) { y = (row + 1) * this.game.tileSize; break; }
-        else if (dy > 0) for (let row = endRow; row >= startRow; row--) for (let col = startCol; col <= endCol; col++) if (!isTileWalkable(row, col)) { y = row * this.game.tileSize - this.height; break; }
+        if (tileCollision) {
+            // If there's a collision, revert to the nearest valid position based on direction
+            if (dx > 0) {
+                // Moving right, find the nearest unwalkable tile's left edge
+                for (let col = endCol; col >= startCol; col--) {
+                    for (let row = startRow; row <= endRow; row++) {
+                        if (!isTileWalkable(row, col)) {
+                            x = col * this.game.tileSize - this.width;
+                            break;
+                        }
+                    }
+                }
+            } else if (dx < 0) {
+                // Moving left, find the nearest unwalkable tile's right edge
+                for (let col = startCol; col <= endCol; col++) {
+                    for (let row = startRow; row <= endRow; row++) {
+                        if (!isTileWalkable(row, col)) {
+                            x = (col + 1) * this.game.tileSize;
+                            break;
+                        }
+                    }
+                }
+            }
 
+            if (dy > 0) {
+                // Moving down, find the nearest unwalkable tile's top edge
+                for (let row = endRow; row >= startRow; row--) {
+                    for (let col = startCol; col <= endCol; col++) {
+                        if (!isTileWalkable(row, col)) {
+                            y = row * this.game.tileSize - this.height;
+                            break;
+                        }
+                    }
+                }
+            } else if (dy < 0) {
+                // Moving up, find the nearest unwalkable tile's bottom edge
+                for (let row = startRow; row <= endRow; row++) {
+                    for (let col = startCol; col <= endCol; col++) {
+                        if (!isTileWalkable(row, col)) {
+                            y = (row + 1) * this.game.tileSize;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check ore deposit collisions
         for (let deposit of this.game.oreDeposits) {
             const playerLeft = x;
             const playerRight = x + this.width;

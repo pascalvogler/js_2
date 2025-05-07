@@ -2,6 +2,13 @@ import { Tooltip } from './Tooltip.js';
 import { OreDeposit } from './OreDeposit.js';
 import { Player } from './Player.js';
 import { Camera } from './Camera.js';
+import { Monster } from './Monster.js';
+import { Enemy } from './Enemy.js';
+import {
+    CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT,
+    NUM_WALL_WALKS, NUM_WATER_WALKS, WALL_WALK_LENGTH, WATER_WALK_LENGTH,
+    MINING_RANGE, NUM_ORE_DEPOSITS, NUM_MONSTERS, NUM_ENEMIES, ENERGY_WINDOW_HEIGHT, ENERGY_WINDOW_PADDING, PAUSE_TEXT_SIZE
+} from './Constants.js';
 
 export class Game {
     constructor(canvas) {
@@ -9,14 +16,16 @@ export class Game {
         this.context = canvas.getContext('2d');
         this.width = this.canvas.width;
         this.height = this.canvas.height;
-        this.mapWidth = 2000;
-        this.mapHeight = 2000;
-        this.tileSize = 50;
+        this.mapWidth = MAP_WIDTH;
+        this.mapHeight = MAP_HEIGHT;
+        this.tileSize = TILE_SIZE;
         this.mapCols = this.mapWidth / this.tileSize;
         this.mapRows = this.mapHeight / this.tileSize;
         this.keys = [];
         this.map = [];
         this.oreDeposits = [];
+        this.monsters = [];
+        this.enemies = [];
         this.mouse = { x: 0, y: 0 };
         this.mining = { active: false, ore: null, startTime: 0 };
         this.miningFeedback = [];
@@ -27,9 +36,13 @@ export class Game {
         this.OreDeposit = OreDeposit;
         this.Player = Player;
         this.Camera = Camera;
+        this.Monster = Monster;
+        this.Enemy = Enemy;
 
         this.generateMap();
-        this.oreDeposits = OreDeposit.spawn(this, 10);
+        this.oreDeposits = OreDeposit.spawn(this, NUM_ORE_DEPOSITS);
+        this.monsters = Monster.spawn(this);
+        this.enemies = Enemy.spawn(this);
         this.player = new Player(this);
         this.camera = new Camera(this);
 
@@ -41,7 +54,12 @@ export class Game {
             }
             // Handle pause/unpause with ESC (keyCode 27)
             if (e.keyCode === 27) {
-                this.state = this.state === 'running' ? 'paused' : 'running';
+                if (this.state === 'running') {
+                    this.state = 'paused';
+                    this.keys = []; // Clear keys to stop movement
+                } else {
+                    this.state = 'running';
+                }
                 e.preventDefault();
             }
         });
@@ -61,15 +79,29 @@ export class Game {
                 this.mouse.x = e.clientX - rect.left + this.camera.x;
                 this.mouse.y = e.clientY - rect.top + this.camera.y;
 
-                let hoveredDeposit = null;
+                let hoveredTarget = null;
                 for (let deposit of this.oreDeposits) {
                     if (this.mouse.x >= deposit.x && this.mouse.x <= deposit.x + deposit.width &&
                         this.mouse.y >= deposit.y && this.mouse.y <= deposit.y + deposit.height) {
-                        hoveredDeposit = deposit;
+                        hoveredTarget = deposit;
                         break;
                     }
                 }
-                this.tooltip.target = hoveredDeposit;
+                for (let monster of this.monsters) {
+                    if (this.mouse.x >= monster.x && this.mouse.x <= monster.x + monster.width &&
+                        this.mouse.y >= monster.y && this.mouse.y <= monster.y + monster.height) {
+                        hoveredTarget = monster;
+                        break;
+                    }
+                }
+                for (let enemy of this.enemies) {
+                    if (this.mouse.x >= enemy.x && this.mouse.x <= enemy.x + enemy.width &&
+                        this.mouse.y >= enemy.y && this.mouse.y <= enemy.y + enemy.height) {
+                        hoveredTarget = enemy;
+                        break;
+                    }
+                }
+                this.tooltip.target = hoveredTarget;
             }
         });
 
@@ -88,7 +120,7 @@ export class Game {
                         const dy = playerCenterY - oreCenterY;
                         const distance = Math.sqrt(dx * dx + dy * dy);
 
-                        if (distance <= 75) {
+                        if (distance <= MINING_RANGE) {
                             this.mining.active = true;
                             this.mining.ore = deposit;
                             this.mining.startTime = Date.now();
@@ -116,12 +148,10 @@ export class Game {
             }
         }
 
-        const numWallWalks = 5;
-        for (let i = 0; i < numWallWalks; i++) {
+        for (let i = 0; i < NUM_WALL_WALKS; i++) {
             let x = Math.floor(Math.random() * this.mapCols);
             let y = Math.floor(Math.random() * this.mapRows);
-            const walkLength = 20;
-            for (let j = 0; j < walkLength; j++) {
+            for (let j = 0; j < WALL_WALK_LENGTH; j++) {
                 this.map[y][x] = 1;
                 const direction = Math.floor(Math.random() * 4);
                 if (direction === 0 && x > 0) x--;
@@ -131,12 +161,10 @@ export class Game {
             }
         }
 
-        const numWaterWalks = 3;
-        for (let i = 0; i < numWaterWalks; i++) {
+        for (let i = 0; i < NUM_WATER_WALKS; i++) {
             let x = Math.floor(Math.random() * this.mapCols);
             let y = Math.floor(Math.random() * this.mapRows);
-            const walkLength = 15;
-            for (let j = 0; j < walkLength; j++) {
+            for (let j = 0; j < WATER_WALK_LENGTH; j++) {
                 this.map[y][x] = 2;
                 const direction = Math.floor(Math.random() * 4);
                 if (direction === 0 && x > 0) x--;
@@ -147,16 +175,24 @@ export class Game {
         }
     }
 
-    isWalkable(x, y, width = 50, height = 50) {
+    isWalkable(x, y, width = TILE_SIZE, height = TILE_SIZE) {
         const startCol = Math.floor(x / this.tileSize);
         const endCol = Math.floor((x + width - 1) / this.tileSize);
         const startRow = Math.floor(y / this.tileSize);
         const endRow = Math.floor((y + height - 1) / this.tileSize);
 
+        console.log(`Checking isWalkable for x=${x}, y=${y}, width=${width}, height=${height}`);
+
         for (let row = startRow; row <= endRow; row++) {
             for (let col = startCol; col <= endCol; col++) {
-                if (row < 0 || row >= this.mapRows || col < 0 || col >= this.mapCols || !this.map[row] || typeof this.map[row][col] === 'undefined') return false;
-                if (this.map[row][col] !== 0) return false;
+                if (row < 0 || row >= this.mapRows || col < 0 || col >= this.mapCols || !this.map[row] || typeof this.map[row][col] === 'undefined') {
+                    console.log(`isWalkable failed: Out of bounds or undefined at row=${row}, col=${col}`);
+                    return false;
+                }
+                if (this.map[row][col] !== 0) {
+                    console.log(`isWalkable failed: Non-walkable tile at row=${row}, col=${col}, value=${this.map[row][col]}`);
+                    return false;
+                }
             }
         }
 
@@ -171,9 +207,49 @@ export class Game {
                 const depositTop = deposit.y;
                 const depositBottom = deposit.y + deposit.height;
 
-                if (playerRight > depositLeft && playerLeft < depositRight && playerBottom > depositTop && playerTop < depositBottom) return false;
+                if (playerRight > depositLeft && playerLeft < depositRight && playerBottom > depositTop && playerTop < depositBottom) {
+                    console.log(`isWalkable failed: Collision with ore at x=${deposit.x}, y=${deposit.y}`);
+                    return false;
+                }
             }
         }
+
+        if (this.monsters) {
+            for (let monster of this.monsters) {
+                const playerLeft = x;
+                const playerRight = x + width;
+                const playerTop = y;
+                const playerBottom = y + height;
+                const monsterLeft = monster.x;
+                const monsterRight = monster.x + monster.width;
+                const monsterTop = monster.y;
+                const monsterBottom = monster.y + monster.height;
+
+                if (playerRight > monsterLeft && playerLeft < monsterRight && playerBottom > monsterTop && playerTop < monsterBottom) {
+                    console.log(`isWalkable failed: Collision with monster at x=${monster.x}, y=${monster.y}`);
+                    return false;
+                }
+            }
+        }
+
+        if (this.enemies) {
+            for (let enemy of this.enemies) {
+                const playerLeft = x;
+                const playerRight = x + width;
+                const playerTop = y;
+                const playerBottom = y + height;
+                const enemyLeft = enemy.x;
+                const enemyRight = enemy.x + enemy.width;
+                const enemyTop = enemy.y;
+                const enemyBottom = enemy.y + enemy.height;
+
+                if (playerRight > enemyLeft && playerLeft < enemyRight && playerBottom > enemyTop && playerTop < enemyBottom) {
+                    console.log(`isWalkable failed: Collision with enemy at x=${enemy.x}, y=${enemy.y}`);
+                    return false;
+                }
+            }
+        }
+        console.log(`isWalkable succeeded for x=${x}, y=${y}`);
         return true;
     }
 
@@ -201,6 +277,18 @@ export class Game {
 
         if (this.oreDeposits) {
             for (let deposit of this.oreDeposits) deposit.draw(context);
+        }
+        if (this.monsters) {
+            for (let monster of this.monsters) {
+                monster.update(deltaTime, this.player, this);
+                monster.draw(context);
+            }
+        }
+        if (this.enemies) {
+            for (let enemy of this.enemies) {
+                enemy.update(deltaTime, this.player, this);
+                enemy.draw(context);
+            }
         }
 
         context.restore();
@@ -268,22 +356,20 @@ export class Game {
 
         context.font = '20px Impact';
         const energyText = `Total Energy: ${this.player.totalEnergy}`;
-        const padding = 10;
-        const windowWidth = context.measureText(energyText).width + padding * 2;
-        const windowHeight = 30;
+        const windowWidth = context.measureText(energyText).width + ENERGY_WINDOW_PADDING * 2;
         const windowX = this.width - windowWidth;
-        const windowY = this.height - windowHeight;
+        const windowY = this.height - ENERGY_WINDOW_HEIGHT;
         context.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        context.fillRect(windowX, windowY, windowWidth, windowHeight);
+        context.fillRect(windowX, windowY, windowWidth, ENERGY_WINDOW_HEIGHT);
         context.fillStyle = 'white';
-        context.fillText(energyText, windowX + padding, windowY + 20);
+        context.fillText(energyText, windowX + ENERGY_WINDOW_PADDING, windowY + 20);
 
         // Pause indication
         if (this.state === 'paused') {
             context.fillStyle = 'rgba(0, 0, 0, 0.5)';
             context.fillRect(0, 0, this.width, this.height);
             context.fillStyle = 'white';
-            context.font = 'bold 48px Impact';
+            context.font = `bold ${PAUSE_TEXT_SIZE}px Impact`;
             context.textAlign = 'center';
             context.fillText('Paused', this.width / 2, this.height / 2);
             context.textAlign = 'left';
@@ -295,8 +381,8 @@ export class Game {
 window.addEventListener('load', function () {
     const canvas = document.getElementById('canvas1');
     const ctx = canvas.getContext('2d');
-    canvas.width = 1800;
-    canvas.height = 800;
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
     ctx.font = '20px Impact';
 
     const game = new Game(canvas);

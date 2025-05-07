@@ -1,18 +1,16 @@
+import { TILE_SIZE, ORE_DATA } from './Constants.js';
+
 export class OreDeposit {
     constructor(x, y, resource_type, energy) {
         this.x = x;
         this.y = y;
-        this.width = 50;
-        this.height = 50;
+        this.width = TILE_SIZE;
+        this.height = TILE_SIZE;
         this.resource_type = resource_type;
         this.energy = energy;
     }
 
-    static oreData = {
-        'Lavasteel': { probability: 70, energyMin: 1, energyMax: 3 },
-        'Mithril': { probability: 25, energyMin: 2, energyMax: 6 },
-        'Obsidianite': { probability: 5, energyMin: 8, energyMax: 12 }
-    };
+    static oreData = ORE_DATA;
 
     static spawn(game, numDeposits) {
         const deposits = [];
@@ -30,7 +28,7 @@ export class OreDeposit {
             do {
                 x = Math.floor(Math.random() * game.mapCols) * game.tileSize;
                 y = Math.floor(Math.random() * game.mapRows) * game.tileSize;
-                isValidPosition = game.isWalkable(x, y, 50, 50) && !deposits.some(deposit => deposit.x === x && deposit.y === y);
+                isValidPosition = game.isWalkable(x, y, TILE_SIZE, TILE_SIZE) && !deposits.some(deposit => deposit.x === x && deposit.y === y);
             } while (!isValidPosition);
 
             const rand = Math.random() * 100;
