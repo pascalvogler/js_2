@@ -1,5 +1,5 @@
 import { NPC } from './NPC.js';
-import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, ENEMY_DATA, NUM_ENEMIES, AGGRO_RADIUS, NPC_SPEED } from './Constants.js';
+import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, ENEMY_DATA, NUM_ENEMIES, AGGRO_RADIUS, AGGRO_LOSE_RADIUS_MIN, AGGRO_LOSE_RADIUS_MAX, NPC_SPEED } from './Constants.js';
 
 export class Enemy extends NPC {
     constructor(x, y, enemyType, hp, letter) {
@@ -15,7 +15,8 @@ export class Enemy extends NPC {
         this.attackSpeed = 0.5; // Attacks per second (once every 2 seconds)
         this.attackRadius = 20; // Attack range in pixels
         this.lastAttackTime = 0; // Track the last time this enemy attacked
-        console.log(`Enemy ${enemyType} spawned with initial HP: ${hp}, max HP: ${this.maxHp}`); // Log initial health
+        this.aggroLoseRadius = Math.floor(Math.random() * (AGGRO_LOSE_RADIUS_MAX - AGGRO_LOSE_RADIUS_MIN + 1)) + AGGRO_LOSE_RADIUS_MIN; // Random aggro lose range
+        console.log(`Enemy ${enemyType} spawned with initial HP: ${hp}, max HP: ${this.maxHp}, aggroLoseRadius: ${this.aggroLoseRadius}`); // Log initial health and aggro lose radius
     }
 
     static spawn(game) {
@@ -37,7 +38,8 @@ export class Enemy extends NPC {
                 isValidPosition = game.isWalkable(x, y, TILE_SIZE, TILE_SIZE) &&
                     !enemies.some(e => e.x === x && e.y === y) &&
                     !game.oreDeposits.some(d => d.x === x && d.y === y) &&
-                    !game.monsters.some(m => m.x === x && m.y === y);
+                    !game.monsters.some(m => m.x === x && m.y === y) &&
+                    !game.enemies.some(e => e.x === x && e.y === y);
             } while (!isValidPosition);
 
             const rand = Math.random() * 100;
@@ -104,11 +106,21 @@ export class Enemy extends NPC {
             if (distance <= this.attackRadius) {
                 this.attackPlayer(player);
             }
+
+            // Lose aggro if player moves beyond aggroLoseRadius
+            if (distance > this.aggroLoseRadius) {
+                this.isAggroed = false;
+                this.currentTime = Date.now(); // Reset currentTime to force a new wander direction
+                if (this.wasMoving) {
+                    this.state = 'moving';
+                }
+                console.log(`Enemy ${this.enemyType} lost aggro, distance: ${distance}, aggroLoseRadius: ${this.aggroLoseRadius}`);
+            }
         } else {
             if (this.isAggroed) {
                 // Reset to wandering if player leaves aggro radius
                 this.isAggroed = false;
-                this.currentTime = this.savedTime;
+                this.currentTime = Date.now(); // Reset currentTime to force a new wander direction
                 if (this.wasMoving) {
                     this.state = 'moving';
                 }
