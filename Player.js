@@ -15,6 +15,7 @@ export class Player {
         this.multishotTargets = PLAYER_MULTISHOT_TARGETS;
         this.lastAttackTime = 0; // Track the last time an attack was made
         this.isGameStarted = false; // Flag to delay initial attacks
+        this.tamedMonster = null; // Track the currently tamed monster
 
         let startX, startY;
         do {
@@ -67,11 +68,27 @@ export class Player {
             context.fillRect(barX, barY, barWidth * progress, barHeight);
         }
 
+        if (this.game.taming.active && this.game.taming.monster) {
+            const barWidth = this.width;
+            const barHeight = PROGRESS_BAR_HEIGHT;
+            const barX = this.x;
+            const barY = this.y + this.height + PROGRESS_BAR_OFFSET;
+            const currentTime = Date.now();
+            const holdTime = (currentTime - this.game.taming.startTime) / 1000;
+            const progress = Math.min(holdTime / this.game.taming.duration, 1);
+
+            context.strokeStyle = 'black';
+            context.lineWidth = 1;
+            context.strokeRect(barX, barY, barWidth, barHeight);
+            context.fillStyle = 'blue'; // Blue for taming progress
+            context.fillRect(barX, barY, barWidth * progress, barHeight);
+        }
+
         context.restore();
     }
 
     update(deltaTime) {
-        if (this.game.mining.active) return;
+        if (this.game.mining.active || this.game.taming.active) return;
 
         const speed = this.speed * (deltaTime / 1000);
         const { dx, dy } = this.getMovementInput(speed);

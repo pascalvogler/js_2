@@ -1,10 +1,14 @@
 import { NPC } from './NPC.js';
 import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, MONSTER_DATA, NUM_MONSTERS } from './Constants.js';
+import { Enemy } from './Enemy.js';
 
 export class Monster extends NPC {
-    constructor(x, y, monsterType, hp) {
+    constructor(x, y, monsterType, hp, chanceToCatch) {
         super(x, y, monsterType, hp, MONSTER_DATA[monsterType].color);
         this.monsterType = monsterType;
+        this.chanceToCatch = chanceToCatch;
+        this.tamed = false;
+        this.followDistance = 100; // Distance to maintain from player when tamed
     }
 
     static spawn(game) {
@@ -37,15 +41,42 @@ export class Monster extends NPC {
                 }
             }
 
-            const { hpMin, hpMax } = MONSTER_DATA[monsterType];
+            const { hpMin, hpMax, chanceToCatchMin, chanceToCatchMax } = MONSTER_DATA[monsterType];
             const hp = Math.floor(Math.random() * (hpMax - hpMin + 1)) + hpMin;
+            const chanceToCatch = Math.random() * (chanceToCatchMax - chanceToCatchMin) + chanceToCatchMin;
 
-            monsters.push(new Monster(x, y, monsterType, hp));
+            monsters.push(new Monster(x, y, monsterType, hp, chanceToCatch));
         }
         return monsters;
     }
 
+    convertToEnemy(game) {
+        console.log(`Monster ${this.monsterType} failed to be tamed, converting to enemy`);
+        const enemy = new Enemy(this.x, this.y, this.monsterType, this.hp, this.monsterType[0].toUpperCase());
+        game.enemies.push(enemy);
+        game.monsters = game.monsters.filter(monster => monster !== this);
+    }
+
+    followPlayer(game, deltaTime) {
+        const player = game.player;
+        const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
+        const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance > this.followDistance) {
+            const speed = this.speed * (deltaTime / 1000);
+            const angle = Math.atan2(dy, dx);
+            const moveDx = Math.cos(angle) * speed;
+            const moveDy = Math.sin(angle) * speed;
+            this.move(game, moveDx, moveDy);
+        }
+    }
+
     update(deltaTime, player, game) {
-        this.wander(game, deltaTime);
+        if (this.tamed) {
+            this.followPlayer(game, deltaTime);
+        } else {
+            this.wander(game, deltaTime);
+        }
     }
 }

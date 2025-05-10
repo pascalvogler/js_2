@@ -7,7 +7,7 @@ import { Enemy } from './Enemy.js';
 import {
     CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT,
     NUM_WALL_WALKS, NUM_WATER_WALKS, WALL_WALK_LENGTH, WATER_WALK_LENGTH,
-    MINING_RANGE, NUM_ORE_DEPOSITS, NUM_MONSTERS, NUM_ENEMIES, ENERGY_WINDOW_HEIGHT, ENERGY_WINDOW_PADDING, PAUSE_TEXT_SIZE
+    MINING_RANGE, TAMING_DURATION, NUM_ORE_DEPOSITS, NUM_MONSTERS, NUM_ENEMIES, ENERGY_WINDOW_HEIGHT, ENERGY_WINDOW_PADDING, PAUSE_TEXT_SIZE
 } from './Constants.js';
 
 export class Game {
@@ -28,7 +28,9 @@ export class Game {
         this.enemies = [];
         this.mouse = { x: 0, y: 0 };
         this.mining = { active: false, ore: null, startTime: 0 };
+        this.taming = { active: false, monster: null, startTime: 0, duration: TAMING_DURATION };
         this.miningFeedback = [];
+        this.tamingFeedback = [];
         this.tooltip = new Tooltip(this, null);
         this.state = 'running'; // State management: 'running', 'paused', or 'gameOver'
 
@@ -106,38 +108,77 @@ export class Game {
         });
 
         this.canvas.addEventListener('mousedown', (e) => {
-            if (this.state === 'running' && e.button === 0) {
-                if (this.mining.active) return;
+            if (this.state === 'running') {
+                // Left-click for mining
+                if (e.button === 0) {
+                    if (this.mining.active || this.taming.active) return;
 
-                // Check for mining
-                for (let deposit of this.oreDeposits) {
-                    if (this.mouse.x >= deposit.x && this.mouse.x <= deposit.x + deposit.width &&
-                        this.mouse.y >= deposit.y && this.mouse.y <= deposit.y + deposit.height) {
-                        const playerCenterX = this.player.x + this.player.width / 2;
-                        const playerCenterY = this.player.y + this.player.height / 2;
-                        const oreCenterX = deposit.x + deposit.width / 2;
-                        const oreCenterY = deposit.y + deposit.height / 2;
-                        const dx = playerCenterX - oreCenterX;
-                        const dy = playerCenterY - oreCenterY;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
+                    for (let deposit of this.oreDeposits) {
+                        if (this.mouse.x >= deposit.x && this.mouse.x <= deposit.x + deposit.width &&
+                            this.mouse.y >= deposit.y && this.mouse.y <= deposit.y + deposit.height) {
+                            const playerCenterX = this.player.x + this.player.width / 2;
+                            const playerCenterY = this.player.y + this.player.height / 2;
+                            const oreCenterX = deposit.x + deposit.width / 2;
+                            const oreCenterY = deposit.y + deposit.height / 2;
+                            const dx = playerCenterX - oreCenterX;
+                            const dy = playerCenterY - oreCenterY;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
 
-                        if (distance <= MINING_RANGE) {
-                            this.mining.active = true;
-                            this.mining.ore = deposit;
-                            this.mining.startTime = Date.now();
-                            break;
+                            if (distance <= MINING_RANGE) {
+                                this.mining.active = true;
+                                this.mining.ore = deposit;
+                                this.mining.startTime = Date.now();
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Right-click for taming
+                else if (e.button === 2) {
+                    if (this.mining.active || this.taming.active) return;
+
+                    for (let monster of this.monsters) {
+                        if (monster.tamed) continue; // Skip already tamed monsters
+                        if (this.mouse.x >= monster.x && this.mouse.x <= monster.x + monster.width &&
+                            this.mouse.y >= monster.y && this.mouse.y <= monster.y + monster.height) {
+                            const playerCenterX = this.player.x + this.player.width / 2;
+                            const playerCenterY = this.player.y + this.player.height / 2;
+                            const monsterCenterX = monster.x + monster.width / 2;
+                            const monsterCenterY = monster.y + monster.height / 2;
+                            const dx = playerCenterX - monsterCenterX;
+                            const dy = playerCenterY - monsterCenterY;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+
+                            if (distance <= MINING_RANGE) { // Reuse MINING_RANGE for taming range
+                                this.taming.active = true;
+                                this.taming.monster = monster;
+                                this.taming.startTime = Date.now();
+                                break;
+                            }
                         }
                     }
                 }
             }
+            e.preventDefault(); // Prevent context menu on right-click
         });
 
         this.canvas.addEventListener('mouseup', (e) => {
-            if (this.state === 'running' && e.button === 0) {
-                this.mining.active = false;
-                this.mining.ore = null;
-                this.mining.startTime = 0;
+            if (this.state === 'running') {
+                if (e.button === 0) {
+                    this.mining.active = false;
+                    this.mining.ore = null;
+                    this.mining.startTime = 0;
+                } else if (e.button === 2) {
+                    this.taming.active = false;
+                    this.taming.monster = null;
+                    this.taming.startTime = 0;
+                }
             }
+        });
+
+        // Prevent default context menu on right-click
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
         });
     }
 
@@ -315,6 +356,7 @@ export class Game {
         }
         this.tooltip.draw(context); // Draw tooltip but don't update when paused
 
+        // Handle mining
         if (this.state === 'running' && this.mining.active && this.mining.ore) {
             const ore = this.mining.ore;
             const isMouseOverOre = this.mouse.x >= ore.x && this.mouse.x <= ore.x + ore.width &&
@@ -352,11 +394,70 @@ export class Game {
             }
         }
 
+        // Handle taming
+        if (this.state === 'running' && this.taming.active && this.taming.monster) {
+            const monster = this.taming.monster;
+            const isMouseOverMonster = this.mouse.x >= monster.x && this.mouse.x <= monster.x + monster.width &&
+                                      this.mouse.y >= monster.y && this.mouse.y <= monster.y + monster.height;
+            if (!isMouseOverMonster) {
+                this.taming.active = false;
+                this.taming.monster = null;
+                this.taming.startTime = 0;
+            } else {
+                const currentTime = Date.now();
+                const holdTime = (currentTime - this.taming.startTime) / 1000;
+                if (holdTime >= this.taming.duration) {
+                    const success = Math.random() <= monster.chanceToCatch;
+                    if (success) {
+                        console.log(`Successfully tamed ${monster.monsterType}`);
+                        // Untame the previous monster if exists
+                        if (this.player.tamedMonster) {
+                            this.player.tamedMonster.tamed = false;
+                        }
+                        monster.tamed = true;
+                        this.player.tamedMonster = monster;
+                        this.tamingFeedback.push({
+                            x: monster.x + monster.width / 2,
+                            y: monster.y - 10,
+                            text: 'Tamed!',
+                            startTime: currentTime,
+                            duration: 1
+                        });
+                    } else {
+                        console.log(`Failed to tame ${monster.monsterType}`);
+                        monster.convertToEnemy(this);
+                        this.tamingFeedback.push({
+                            x: monster.x + monster.width / 2,
+                            y: monster.y - 10,
+                            text: 'Failed!',
+                            startTime: currentTime,
+                            duration: 1
+                        });
+                    }
+                    this.taming.active = false;
+                    this.taming.monster = null;
+                    this.taming.startTime = 0;
+                }
+            }
+        }
+
         context.save();
         context.translate(-this.camera.x, -this.camera.y);
         if (this.state === 'running') {
+            // Mining feedback
             context.fillStyle = 'green';
             this.miningFeedback = this.miningFeedback.filter(feedback => {
+                const elapsed = (Date.now() - feedback.startTime) / 1000;
+                if (elapsed < feedback.duration) {
+                    context.fillText(feedback.text, feedback.x, feedback.y);
+                    return true;
+                }
+                return false;
+            });
+
+            // Taming feedback
+            context.fillStyle = 'yellow';
+            this.tamingFeedback = this.tamingFeedback.filter(feedback => {
                 const elapsed = (Date.now() - feedback.startTime) / 1000;
                 if (elapsed < feedback.duration) {
                     context.fillText(feedback.text, feedback.x, feedback.y);

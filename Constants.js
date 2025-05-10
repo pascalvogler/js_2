@@ -8,14 +8,15 @@ export const NUM_WATER_WALKS = 3; // Number of random walks for water generation
 export const WALL_WALK_LENGTH = 20; // Length of each wall walk in map generation
 export const WATER_WALK_LENGTH = 15; // Length of each water walk in map generation
 export const MINING_RANGE = 75; // Max distance (pixels) for player to mine ore
+export const TAMING_DURATION = 5; // Duration in seconds to tame a monster
 export const NUM_ORE_DEPOSITS = 10; // Number of ore deposits to spawn
 export const NUM_MONSTERS = 5; // Number of monsters to spawn
-export const NUM_ENEMIES = 6; // Number of enemies to spawn
+export const NUM_ENEMIES = 3; // Number of enemies to spawn
 export const AGGRO_RADIUS = 300; // Distance (pixels) for enemies to detect player
 export const PLAYER_SPEED = 200; // Player movement speed in pixels per second
 export const NPC_SPEED = PLAYER_SPEED * 0.25; // NPC movement speed (25% of player speed)
 export const MOVEMENT_TOLERANCE = 0.1; // Tolerance for snapping small movements
-export const PROGRESS_BAR_HEIGHT = 10; // Height of mining progress bar in pixels
+export const PROGRESS_BAR_HEIGHT = 10; // Height of mining/taming progress bar in pixels
 export const PROGRESS_BAR_OFFSET = 2; // Vertical offset of progress bar in pixels
 export const TOOLTIP_OFFSET_X = 200; // Horizontal offset of tooltip from right edge
 export const TOOLTIP_OFFSET_Y = 40; // Vertical offset of tooltip from bottom edge
@@ -38,13 +39,13 @@ export const ORE_DATA = {
     'Mithril': { probability: 25, energyMin: 2, energyMax: 6 }, // 25% chance, 2-6 energy
     'Obsidianite': { probability: 5, energyMin: 8, energyMax: 12 } // 5% chance, 8-12 energy
 };
-// Monster types with spawn probabilities, HP ranges, colors, and descriptions
+// Monster types with spawn probabilities, HP ranges, colors, descriptions, and chance to catch
 export const MONSTER_DATA = {
-    'Fluffel': { probability: 40, hpMin: 10, hpMax: 20, color: '#FFD700', description: 'A fluffy creature that loves to nap.' },
-    'Grumblet': { probability: 30, hpMin: 15, hpMax: 25, color: '#8B4513', description: 'A grumpy beast with a loud roar.' },
-    'Sparkleon': { probability: 15, hpMin: 20, hpMax: 30, color: '#FF69B4', description: 'A shiny creature that glows in the dark.' },
-    'Rocko': { probability: 10, hpMin: 25, hpMax: 35, color: '#808080', description: 'A sturdy rock-like monster with a tough shell.' },
-    'Wispwing': { probability: 5, hpMin: 30, hpMax: 40, color: '#87CEEB', description: 'A wispy flyer that drifts with the wind.' }
+    'Fluffel': { probability: 40, hpMin: 10, hpMax: 20, color: '#FFD700', description: 'A fluffy creature that loves to nap.', chanceToCatchMin: 0.5, chanceToCatchMax: 0.9 },
+    'Grumblet': { probability: 30, hpMin: 15, hpMax: 25, color: '#8B4513', description: 'A grumpy beast with a loud roar.', chanceToCatchMin: 0.3, chanceToCatchMax: 0.7 },
+    'Sparkleon': { probability: 15, hpMin: 20, hpMax: 30, color: '#FF69B4', description: 'A shiny creature that glows in the dark.', chanceToCatchMin: 0.2, chanceToCatchMax: 0.5 },
+    'Rocko': { probability: 10, hpMin: 25, hpMax: 35, color: '#808080', description: 'A sturdy rock-like monster with a tough shell.', chanceToCatchMin: 0.1, chanceToCatchMax: 0.4 },
+    'Wispwing': { probability: 5, hpMin: 30, hpMax: 40, color: '#87CEEB', description: 'A wispy flyer that drifts with the wind.', chanceToCatchMin: 0.05, chanceToCatchMax: 0.3 }
 };
 // Enemy types with spawn probabilities, HP ranges, descriptions, and letters
 export const ENEMY_DATA = {
