@@ -11,6 +11,10 @@ export class Enemy extends NPC {
         this.aggroTime = 0; // Track time since aggro started
         this.wasMoving = false; // Track if enemy was moving before aggro
         this.maxHp = hp; // Store max HP for health percentage calculation
+        this.attackDamage = 2; // Enemy attack damage
+        this.attackSpeed = 0.5; // Attacks per second (once every 2 seconds)
+        this.attackRadius = 20; // Attack range in pixels
+        this.lastAttackTime = 0; // Track the last time this enemy attacked
         console.log(`Enemy ${enemyType} spawned with initial HP: ${hp}, max HP: ${this.maxHp}`); // Log initial health
     }
 
@@ -66,6 +70,16 @@ export class Enemy extends NPC {
         }
     }
 
+    attackPlayer(player) {
+        const currentTime = Date.now();
+        const attackInterval = 1000 / this.attackSpeed; // Convert attacks per second to milliseconds (2000 ms)
+        if (currentTime - this.lastAttackTime < attackInterval) return;
+
+        player.takeDamage(this.attackDamage);
+        this.lastAttackTime = currentTime;
+        console.log(`Enemy ${this.enemyType} attacked player for ${this.attackDamage} damage`);
+    }
+
     update(deltaTime, player, game) {
         const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
         const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
@@ -85,6 +99,11 @@ export class Enemy extends NPC {
             const moveDx = Math.cos(angle) * speed;
             const moveDy = Math.sin(angle) * speed;
             this.move(game, moveDx, moveDy); // Use NPC move method with calculated direction
+
+            // Attack player if within attack radius
+            if (distance <= this.attackRadius) {
+                this.attackPlayer(player);
+            }
         } else {
             if (this.isAggroed) {
                 // Reset to wandering if player leaves aggro radius

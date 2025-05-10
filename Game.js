@@ -30,7 +30,7 @@ export class Game {
         this.mining = { active: false, ore: null, startTime: 0 };
         this.miningFeedback = [];
         this.tooltip = new Tooltip(this, null);
-        this.state = 'running'; // State management: 'running' or 'paused'
+        this.state = 'running'; // State management: 'running', 'paused', or 'gameOver'
 
         // Expose classes for use in other modules
         this.OreDeposit = OreDeposit;
@@ -57,7 +57,7 @@ export class Game {
                 if (this.state === 'running') {
                     this.state = 'paused';
                     this.keys = []; // Clear keys to stop movement
-                } else {
+                } else if (this.state === 'paused') {
                     this.state = 'running';
                 }
                 e.preventDefault();
@@ -109,7 +109,6 @@ export class Game {
             if (this.state === 'running' && e.button === 0) {
                 if (this.mining.active) return;
 
-                // Check for enemy attack (handled by automatic attack now)
                 // Check for mining
                 for (let deposit of this.oreDeposits) {
                     if (this.mouse.x >= deposit.x && this.mouse.x <= deposit.x + deposit.width &&
@@ -386,6 +385,17 @@ export class Game {
             context.font = `bold ${PAUSE_TEXT_SIZE}px Impact`;
             context.textAlign = 'center';
             context.fillText('Paused', this.width / 2, this.height / 2);
+            context.textAlign = 'left';
+        }
+
+        // Game Over indication
+        if (this.state === 'gameOver') {
+            context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            context.fillRect(0, 0, this.width, this.height);
+            context.fillStyle = 'red';
+            context.font = `bold ${PAUSE_TEXT_SIZE}px Impact`;
+            context.textAlign = 'center';
+            context.fillText('Game Over', this.width / 2, this.height / 2);
             context.textAlign = 'left';
         }
     }

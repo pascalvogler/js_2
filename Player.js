@@ -7,6 +7,8 @@ export class Player {
         this.height = TILE_SIZE;
         this.speed = PLAYER_SPEED;
         this.totalEnergy = 0;
+        this.hp = 20; // Starting health
+        this.maxHp = 20; // Maximum health
         this.attackRadius = PLAYER_ATTACK_RADIUS;
         this.attackDamage = PLAYER_ATTACK_DAMAGE;
         this.attackSpeed = PLAYER_ATTACK_SPEED; // Attacks per second
@@ -23,11 +25,31 @@ export class Player {
         this.y = startY;
     }
 
+    takeDamage(damage) {
+        this.hp -= damage;
+        console.log(`Player took ${damage} damage, HP now ${this.hp}`);
+        if (this.hp <= 0) {
+            this.hp = 0;
+            this.game.state = 'gameOver'; // Trigger game over state
+        }
+    }
+
     draw(context) {
         context.save();
         context.translate(-this.game.camera.x, -this.game.camera.y);
         context.fillStyle = 'white';
         context.fillRect(this.x, this.y, this.width, this.height);
+
+        // Draw health bar above player with a 5-pixel gap
+        const barHeight = 5;
+        const barY = this.y - barHeight - 5; // 5 pixels above the player
+        const barWidth = this.width;
+        context.strokeStyle = 'black';
+        context.lineWidth = 1;
+        context.strokeRect(this.x, barY, barWidth, barHeight);
+        context.fillStyle = 'green'; // Green for player health
+        const hpPercentage = this.hp / this.maxHp;
+        context.fillRect(this.x, barY, barWidth * hpPercentage, barHeight);
 
         if (this.game.mining.active && this.game.mining.ore) {
             const barWidth = this.width;
