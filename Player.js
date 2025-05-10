@@ -115,19 +115,23 @@ export class Player {
         const startCol = Math.floor(x / this.game.tileSize);
         const endCol = Math.floor((x + this.width - 1) / this.game.tileSize);
         const startRow = Math.floor(y / this.game.tileSize);
-        const endRow = Math.floor((y + this.height - 1) / this.tileSize);
+        const endRow = Math.floor((y + this.height - 1) / this.game.tileSize);
 
         const isTileWalkable = (r, c) => {
-            if (r < 0 || r >= this.game.mapRows || c < 0 || c >= this.mapCols || !this.game.map[r] || typeof this.game.map[r][c] === 'undefined') return false;
-            return this.game.map[r][c] === 0;
+            if (r < 0 || r >= this.game.mapRows || c < 0 || c >= this.game.mapCols || !this.game.map[r] || typeof this.game.map[r][c] === 'undefined') return false;
+            console.log(`Checking tile at row=${r}, col=${c}, value=${this.game.map[r][c]}`);
+            return this.game.map[r][c] === 0; // 0 is walkable, 1 (wall) and 2 (water) are not
         };
 
         // Check if the new position overlaps with any unwalkable tiles
         let tileCollision = false;
+        let collidingTileValue = 0;
         for (let row = startRow; row <= endRow; row++) {
             for (let col = startCol; col <= endCol; col++) {
                 if (!isTileWalkable(row, col)) {
                     tileCollision = true;
+                    collidingTileValue = this.game.map[row][col];
+                    console.log(`Tile collision detected at row=${row}, col=${col}, value=${collidingTileValue}`);
                     break;
                 }
             }
@@ -135,6 +139,7 @@ export class Player {
         }
 
         if (tileCollision) {
+            console.log(`Resolving tile collision with value ${collidingTileValue}, dx=${dx}, dy=${dy}`);
             // If there's a collision, revert to the nearest valid position based on direction
             if (dx > 0) {
                 // Moving right, find the nearest unwalkable tile's left edge
@@ -142,6 +147,7 @@ export class Player {
                     for (let row = startRow; row <= endRow; row++) {
                         if (!isTileWalkable(row, col)) {
                             x = col * this.game.tileSize - this.width;
+                            console.log(`Snapped to left edge at x=${x} due to collision`);
                             break;
                         }
                     }
@@ -152,6 +158,7 @@ export class Player {
                     for (let row = startRow; row <= endRow; row++) {
                         if (!isTileWalkable(row, col)) {
                             x = (col + 1) * this.game.tileSize;
+                            console.log(`Snapped to right edge at x=${x} due to collision`);
                             break;
                         }
                     }
@@ -164,6 +171,7 @@ export class Player {
                     for (let col = startCol; col <= endCol; col++) {
                         if (!isTileWalkable(row, col)) {
                             y = row * this.game.tileSize - this.height;
+                            console.log(`Snapped to top edge at y=${y} due to collision`);
                             break;
                         }
                     }
@@ -174,6 +182,7 @@ export class Player {
                     for (let col = startCol; col <= endCol; col++) {
                         if (!isTileWalkable(row, col)) {
                             y = (row + 1) * this.game.tileSize;
+                            console.log(`Snapped to bottom edge at y=${y} due to collision`);
                             break;
                         }
                     }
