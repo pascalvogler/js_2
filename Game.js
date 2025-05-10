@@ -109,6 +109,8 @@ export class Game {
             if (this.state === 'running' && e.button === 0) {
                 if (this.mining.active) return;
 
+                // Check for enemy attack (handled by automatic attack now)
+                // Check for mining
                 for (let deposit of this.oreDeposits) {
                     if (this.mouse.x >= deposit.x && this.mouse.x <= deposit.x + deposit.width &&
                         this.mouse.y >= deposit.y && this.mouse.y <= deposit.y + deposit.height) {
@@ -254,6 +256,14 @@ export class Game {
     }
 
     render(context, deltaTime) {
+        console.log(`Render called, player.isGameStarted: ${this.player.isGameStarted}`);
+
+        // Start the game before any updates to prevent premature attacks
+        if (!this.player.isGameStarted) {
+            this.player.startGame();
+            console.log(`Game started, player.isGameStarted now: ${this.player.isGameStarted}`);
+        }
+
         context.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         const startCol = Math.floor(this.camera.x / this.tileSize);

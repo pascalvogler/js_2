@@ -28,6 +28,10 @@ export const EXPANDED_FONT_SIZE = 14; // Font size for expanded tooltip text in 
 export const ENERGY_WINDOW_HEIGHT = 30; // Height of energy window in pixels
 export const ENERGY_WINDOW_PADDING = 10; // Padding inside energy window in pixels
 export const PAUSE_TEXT_SIZE = 48; // Font size for "Paused" text in pixels
+export const PLAYER_ATTACK_RADIUS = 200; // Radius (pixels) for player to auto-attack enemies
+export const PLAYER_ATTACK_DAMAGE = 5; // Damage dealt by player per attack
+export const PLAYER_ATTACK_SPEED = 1; // Attacks per second
+export const PLAYER_MULTISHOT_TARGETS = 1; // Number of enemies the player can target simultaneously
 // Ore types with spawn probabilities and energy ranges
 export const ORE_DATA = {
     'Lavasteel': { probability: 70, energyMin: 1, energyMax: 3 }, // 70% chance, 1-3 energy

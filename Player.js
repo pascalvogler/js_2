@@ -1,4 +1,4 @@
-import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, PLAYER_SPEED, MOVEMENT_TOLERANCE, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_OFFSET } from './Constants.js';
+import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, PLAYER_SPEED, MOVEMENT_TOLERANCE, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_OFFSET, PLAYER_ATTACK_RADIUS, PLAYER_ATTACK_DAMAGE, PLAYER_ATTACK_SPEED, PLAYER_MULTISHOT_TARGETS } from './Constants.js';
 
 export class Player {
     constructor(game) {
@@ -7,6 +7,12 @@ export class Player {
         this.height = TILE_SIZE;
         this.speed = PLAYER_SPEED;
         this.totalEnergy = 0;
+        this.attackRadius = PLAYER_ATTACK_RADIUS;
+        this.attackDamage = PLAYER_ATTACK_DAMAGE;
+        this.attackSpeed = PLAYER_ATTACK_SPEED; // Attacks per second
+        this.multishotTargets = PLAYER_MULTISHOT_TARGETS;
+        this.lastAttackTime = 0; // Track the last time an attack was made
+        this.isGameStarted = false; // Flag to delay initial attacks
 
         let startX, startY;
         do {
@@ -49,6 +55,11 @@ export class Player {
         const { dx, dy } = this.getMovementInput(speed);
         this.move(dx, dy);
         this.game.camera.update();
+
+        // Automatic attack logic
+        if (this.isGameStarted) {
+            this.handleAutomaticAttack(deltaTime);
+        }
     }
 
     getMovementInput(speed) {
@@ -104,7 +115,7 @@ export class Player {
         const startCol = Math.floor(x / this.game.tileSize);
         const endCol = Math.floor((x + this.width - 1) / this.game.tileSize);
         const startRow = Math.floor(y / this.game.tileSize);
-        const endRow = Math.floor((y + this.height - 1) / this.game.tileSize);
+        const endRow = Math.floor((y + this.height - 1) / this.tileSize);
 
         const isTileWalkable = (r, c) => {
             if (r < 0 || r >= this.game.mapRows || c < 0 || c >= this.mapCols || !this.game.map[r] || typeof this.game.map[r][c] === 'undefined') return false;
@@ -191,5 +202,51 @@ export class Player {
         }
 
         return { x, y };
+    }
+
+    handleAutomaticAttack(deltaTime) {
+        console.log(`Player handleAutomaticAttack called, isGameStarted: ${this.isGameStarted}, time: ${Date.now()}`);
+        // Check if enough time has passed to attack again
+        const currentTime = Date.now();
+        const attackInterval = 1000 / this.attackSpeed; // Convert attacks per second to milliseconds
+        if (currentTime - this.lastAttackTime < attackInterval) return;
+
+        // Find enemies within attack radius
+        const enemiesInRange = [];
+        for (let enemy of this.game.enemies) {
+            const dx = (enemy.x + enemy.width / 2) - (this.x + this.width / 2);
+            const dy = (enemy.y + enemy.height / 2) - (this.y + this.height / 2);
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance <= this.attackRadius) {
+                enemiesInRange.push(enemy);
+            }
+        }
+        console.log(`Enemies in range: ${enemiesInRange.length}, targets: ${enemiesInRange.map(e => e.enemyType).join(', ')}`);
+
+        if (enemiesInRange.length === 0) return;
+
+        // Randomly select up to multishotTargets enemies
+        const targets = [];
+        const numTargets = Math.min(this.multishotTargets, enemiesInRange.length);
+        const availableEnemies = [...enemiesInRange];
+        for (let i = 0; i < numTargets; i++) {
+            if (availableEnemies.length === 0) break;
+            const randomIndex = Math.floor(Math.random() * availableEnemies.length);
+            targets.push(availableEnemies[randomIndex]);
+            availableEnemies.splice(randomIndex, 1); // Remove selected enemy to avoid duplicates
+        }
+
+        // Attack the selected enemies
+        for (let target of targets) {
+            target.takeDamage(this.attackDamage, this.game);
+        }
+
+        this.lastAttackTime = currentTime;
+    }
+
+    // Set game started flag after initial setup
+    startGame() {
+        console.log(`Player startGame called, setting isGameStarted to true, time: ${Date.now()}`);
+        this.isGameStarted = true;
     }
 }

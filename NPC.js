@@ -157,10 +157,7 @@ export class NPC {
         return { x, y };
     }
 
-    move(game, deltaTime) {
-        const speed = this.speed * (deltaTime / 1000); // Same speed calculation as player
-        const { dx, dy } = this.getMovementInput(speed);
-
+    move(game, dx, dy) { // Changed to accept dx, dy directly
         let newX = this.x;
         let newY = this.y;
 
@@ -181,10 +178,10 @@ export class NPC {
         if (Math.abs(newX - this.x) < tolerance) newX = this.x;
         if (Math.abs(newY - this.y) < tolerance) newY = this.y;
 
-        // If movement is blocked (position didn't change significantly), pick a new angle
+        // If movement is blocked (position didn't change significantly), pick a new angle for wandering
         if (Math.abs(newX - this.x) < tolerance && Math.abs(newY - this.y) < tolerance && (dx !== 0 || dy !== 0)) {
             console.log(`NPC ${this.type} movement blocked, picking new angle`);
-            this.angle = Math.random() * 2 * Math.PI; // Pick a new random angle
+            this.angle = Math.random() * 2 * Math.PI; // Pick a new random angle for wandering
             return;
         }
 
@@ -198,7 +195,9 @@ export class NPC {
 
         if (this.state === 'moving') {
             console.log(`NPC ${this.type} moving, currentTime=${this.currentTime}, moveTime=${this.moveTime}`);
-            this.move(game, deltaTime);
+            const speed = this.speed * (deltaTime / 1000);
+            const { dx, dy } = this.getMovementInput(speed);
+            this.move(game, dx, dy);
             if (this.currentTime >= this.moveTime) {
                 console.log(`NPC ${this.type} finished moving, transitioning to paused`);
                 this.state = 'paused';
